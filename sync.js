@@ -105,8 +105,13 @@ async function attach(){if(!db||!user||!familyId)return;const attachedFamily=fam
   try{let payload=await readPayload(d),next=JSON.parse(payload);if(!Array.isArray(next.years)||!Array.isArray(next.library))throw Error('Ungültige Daten');
    if(seq!==readSequence||dirty||conflict||familyId!==attachedFamily)return;
    const local=JSON.stringify(state),same=local===payload;
-   // Automatic cloud updates are safe only if local data still match the last confirmed sync.
-   if(!same&&!locallyUnchanged()){
+   // A confirmed baseline for this family/revision plus no pending local save means
+   // the client has not intentionally edited the planner since the last sync.
+   // A byte-for-byte fingerprint may differ after schema migration or normalization.
+   // Keep the conservative conflict behavior for first-time/unknown local states.
+   const confirmed=baseline();
+   const safeToApply=locallyUnchanged() || (!!confirmed && confirmed.revision===rev && !dirty);
+   if(!same&&!safeToApply){
      conflict=true;notice='Lokale und Cloud-Planung unterscheiden sich. Bitte zuerst JSON-Sicherung exportieren und dann bewusst die gewünschte Version auswählen.';paint();return;
    }
    if(!same){state=next;migrate();localStorage.setItem(KEY,JSON.stringify(state));render()}
