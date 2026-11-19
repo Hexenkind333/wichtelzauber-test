@@ -1,6 +1,14 @@
 /* Wichtelzauber family synchronization, Firebase Auth + Firestore. No credentials embedded. */
 (()=>{'use strict';
-const CONF='wichtel_firebase_config_v1',FAMILY='wichtel_family_id_v1',PENDING='wichtel_cloud_pending_v1',REV='wichtel_cloud_revision_v1',BASE='wichtel_cloud_baseline_v1';
+// Vorherige Test-Synchronisierungsschlüssel einmalig übernehmen, ohne die alten Schlüssel zu löschen.
+const LEGACY={CONF:'wichtel_firebase_config_v1',FAMILY:'wichtel_family_id_v1',PENDING:'wichtel_cloud_pending_v1',REV:'wichtel_cloud_revision_v1',BASE:'wichtel_cloud_baseline_v1'};
+const CONF='wichtel_test_firebase_config_v1',FAMILY='wichtel_test_family_id_v1',PENDING='wichtel_test_cloud_pending_v1',REV='wichtel_test_cloud_revision_v1',BASE='wichtel_test_cloud_baseline_v1';
+if(!localStorage.getItem(FAMILY)&&localStorage.getItem(LEGACY.FAMILY)){
+  for(const [name,oldKey] of Object.entries(LEGACY)){
+    const newKey={CONF,FAMILY,PENDING,REV,BASE}[name];
+    if(localStorage.getItem(newKey)===null&&localStorage.getItem(oldKey)!==null)localStorage.setItem(newKey,localStorage.getItem(oldKey));
+  }
+}
 let fb=null,auth=null,db=null,user=null,familyId=localStorage.getItem(FAMILY)||'',unsubscribe=null,rev=Number(localStorage.getItem(REV)||0),busy=false,dirty=localStorage.getItem(PENDING)==='1',timer=null,conflict=false,initializing=false,notice='',readSequence=0;
 const $=id=>document.getElementById(id),html=s=>esc(s),setNotice=t=>{notice=t;paint()};
 // No production Firebase credentials in the test build. Configure a dedicated test project.
