@@ -99,19 +99,28 @@ window.wichtelCloudSave=()=>{markDirty()};
   finally{busy=false;paint();if(dirty&&!conflict&&navigator.onLine){clearTimeout(timer);timer=setTimeout(flush,5000)}}}
 async function attach(){if(!db||!user||!familyId)return;const attachedFamily=familyId;try{let fam=await db.collection('families').doc(familyId).get();if(!fam.exists||!fam.data().members?.[user.uid])throw Error('Du bist für diese Familie nicht freigeschaltet. Der Gründer muss zuerst deine UID hinzufügen.');unsubscribe=doc().onSnapshot(async snap=>{
   if(!snap.exists||familyId!==attachedFamily)return;let d=snap.data();const seq=++readSequence;
-  if(dirty){if(d.revision!==rev){conflict=true;notice='Cloud und lokale Daten unterscheiden sich. Bitte Sicherung exportieren.'}paint();return}
   if(conflict)return;
-  if($('modal')?.open){notice='Cloud geändert. Bitte Bearbeitungsfenster schließen.';paint();return}
-  try{let payload=await readPayload(d),next=JSON.parse(payload);if(!Array.isArray(next.years)||!Array.isArray(next.library))throw Error('Ungültige Daten');
-   if(seq!==readSequence||dirty||conflict||familyId!==attachedFamily)return;
+  try{
+   // Even when a pending-save flag survived a reload, compare the actual data first.
+   // A stale flag alone must never create a conflict or block a clean cloud refresh.
+   let payload=await readPayload(d);
+   if(seq!==readSequence||familyId!==attachedFamily)return;
    const local=JSON.stringify(state),same=local===payload;
-   // A confirmed baseline for this family/revision plus no pending local save means
-   // the client has not intentionally edited the planner since the last sync.
-   // A byte-for-byte fingerprint may differ after schema migration or normalization.
-   // Keep the conservative conflict behavior for first-time/unknown local states.
-   const confirmed=baseline();
-   const safeToApply=locallyUnchanged() || (!!confirmed && confirmed.revision===rev && !dirty);
-   if(!same&&!safeToApply){
+   if(dirty){
+    if(same){
+     rev=d.revision;localStorage.setItem(REV,String(rev));remember(payload,rev);
+     dirty=false;localStorage.removeItem(PENDING);conflict=false;notice='';paint();return;
+    }
+    if(d.revision!==rev){
+     conflict=true;notice='Lokale und Cloud-Planung wurden unabhängig geändert. Bitte zuerst JSON-Sicherung exportieren und dann bewusst die gewünschte Version auswählen.';paint();return;
+    }
+    paint();if(!busy)flush();return;
+   }
+   if($('modal')?.open){notice='Cloud geändert. Bitte Bearbeitungsfenster schließen.';paint();return}
+   let next=JSON.parse(payload);if(!Array.isArray(next.years)||!Array.isArray(next.library))throw Error('Ungültige Daten');
+   if(seq!==readSequence||dirty||conflict||familyId!==attachedFamily)return;
+   // Automatic cloud updates are safe only if local data still match the last confirmed sync.
+   if(!same&&!locallyUnchanged()){
      conflict=true;notice='Lokale und Cloud-Planung unterscheiden sich. Bitte zuerst JSON-Sicherung exportieren und dann bewusst die gewünschte Version auswählen.';paint();return;
    }
    if(!same){state=next;migrate();localStorage.setItem(KEY,JSON.stringify(state));render()}
